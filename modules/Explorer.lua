@@ -53,7 +53,8 @@ local function main()
 
 	local iconData
 	local remote_blocklist = {} -- list of remotes beng blocked, k = the remote instance, v = their old function :3
-	nodes = nodes or {}
+	-- Each explorer owns its own tree; repeated executions must not reuse stale nodes.
+	local nodes = {}
 
 	addObject = function(root)
 		if nodes[root] then return end
@@ -1622,7 +1623,11 @@ local function main()
 	Explorer.RefreshNilInstances = function()
 		if not env.getnilinstances then return end
 
-		local nilInsts = env.getnilinstances()
+		local ok, nilInsts = pcall(env.getnilinstances)
+		if not ok or type(nilInsts) ~= "table" then
+			warn("Dex++: unable to refresh Nil Instances: " .. tostring(nilInsts))
+			return
+		end
 		local game = game
 		local getDescs = game.GetDescendants
 		--local newNilMap = {}

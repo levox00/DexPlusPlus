@@ -1,36 +1,13 @@
 local oldgame = oldgame or game
 
-cloneref = cloneref or function(ref)
-	if not getreg then return ref end
-	
-	local InstanceList
-	
-	local a = Instance.new("Part")
-	for _, c in pairs(getreg()) do
-		if type(c) == "table" and #c then
-			if rawget(c, "__mode") == "kvs" then
-				for d, e in pairs(c) do
-					if e == a then
-						InstanceList = c
-						break
-					end
-				end
-			end
-		end
+-- A missing or broken executor implementation must never turn a service into nil.
+local executorCloneref = cloneref
+local function cloneref(ref)
+	if type(executorCloneref) == "function" then
+		local ok, result = pcall(executorCloneref, ref)
+		if ok and result ~= nil then return result end
 	end
-	local f = {}
-	function f.invalidate(g)
-		if not InstanceList then
-			return
-		end
-		for b, c in pairs(InstanceList) do
-			if c == g then
-				InstanceList[b] = nil
-				return g
-			end
-		end
-	end
-	return f.invalidate
+	return ref
 end
 
 local isFsSupported = readfile and writefile and isfile and isfolder and listfiles and delfile and delfolder
@@ -477,25 +454,45 @@ Main = (function()
 		env.makefolder = makefolder
 		env.listfiles = listfiles
 		env.loadfile = loadfile
-		env.saveinstance = saveinstance or (function()
-			--warn("No built-in saveinstance exists, using SynSaveInstance and wrapper...")
-			if game:GetService("RunService"):IsStudio() then return function() error("Cannot run in Roblox Studio!") end end
-			local Params = {
-				RepoURL = "https://raw.githubusercontent.com/luau/SynSaveInstance/main/",
-				SSI = "saveinstance",
-			}
-			local synsaveinstance = loadstring(oldgame:HttpGet(Params.RepoURL .. Params.SSI .. ".luau", true), Params.SSI)()
-		
-			local function wrappedsaveinstance(obj, filepath, options)
-				options["FilePath"] = filepath
-				--options["ReadMe"] = false
-				options["Object"] = obj
-				return synsaveinstance(options)
+		local nativeSaveInstance = saveinstance
+		local universalSaveInstance
+		local function saveWithUniversal(obj, filepath, options, wholePlace)
+			if game:GetService("RunService"):IsStudio() then error("Cannot run in Roblox Studio!") end
+			if not universalSaveInstance then
+				local url = "https://raw.githubusercontent.com/luau/UniversalSynSaveInstance/main/saveinstance.luau"
+				local source = oldgame:HttpGet(url, true)
+				local chunk, compileError = loadstring(source, "saveinstance")
+				if not chunk then error("Could not compile USSI: " .. tostring(compileError)) end
+				universalSaveInstance = chunk()
+				if type(universalSaveInstance) ~= "function" then error("USSI did not return a save function") end
 			end
-			
-			getgenv().saveinstance = wrappedsaveinstance
-			return wrappedsaveinstance
-		end)()
+			local saveOptions = {}
+			for key, value in pairs(options or {}) do saveOptions[key] = value end
+			saveOptions.FilePath = filepath
+			if wholePlace then
+				-- Do not rely on instance identity across executor-cloned game references.
+				saveOptions.Object = nil
+				saveOptions.IsModel = false
+				saveOptions.mode = "full"
+			else
+				saveOptions.Object = obj
+			end
+			return universalSaveInstance(saveOptions)
+		end
+		env.saveinstance = function(obj, filepath, options, wholePlace)
+			if type(nativeSaveInstance) == "function" then
+				local ok, result = pcall(nativeSaveInstance, obj, filepath, options)
+				if ok then return result end
+				-- Some executors expose a different saveinstance signature and treat
+				-- the filename as a configuration table. Only retry this known mismatch.
+				local message = tostring(result)
+				if not (message:find("RepoURL", 1, true) and message:find("string", 1, true)) then
+					error(result, 0)
+				end
+				warn("Dex++: incompatible executor saveinstance signature; using USSI instead")
+			end
+			return saveWithUniversal(obj, filepath, options, wholePlace)
+		end
 		
 		env.parsefile = function(name)
 			return tostring(name):gsub("[*\\?:<>|]+", ""):sub(1, 175)

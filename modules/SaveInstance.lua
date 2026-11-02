@@ -276,7 +276,7 @@ local function main()
 		Button.MouseButton1Click:Connect(function()
 			local fileName = FilenameTextBox.TextBox.Text:gsub("{TIMESTAMP}", os.date("%d-%m-%Y_%H-%M-%S"))
 			window:SetTitle("Save Instance - Saving")
-			local s, result = pcall(env.saveinstance, game, fileName, SaveInstanceArgs)
+			local s, result = pcall(env.saveinstance, game, fileName, SaveInstanceArgs, true)
 			if s then
 				window:SetTitle("Save Instance - Saved")
 			else
