@@ -895,7 +895,11 @@ local function main()
 	local tree,listEntries,explorerOrders,searchResults,specResults = {},{},{},{},{}
 	local expanded
 	local entryTemplate,treeFrame,toolBar,descendantAddedCon,descendantRemovingCon,itemChangedCon
-	local ffa = game.FindFirstAncestorWhichIsA
+	-- The immediate parent is the tree parent; querying an abstract ancestor
+	-- class can return nil on some executors, including for top-level services.
+	local function ffa(obj)
+		return obj.Parent
+	end
 	local getDescendants = game.GetDescendants
 	local getTextSize = service.TextService.GetTextSize
 	local updateDebounce,refreshDebounce = false,false
@@ -3433,31 +3437,29 @@ return search]==]
 		Explorer.SetupConnections()
 
 		local insts = getDescendants(game)
-		if Main.Elevated then
-			for i = 1,#insts do
-				local obj = insts[i]
-				local par = nodes[ffa(obj,"Instance")]
-				if not par then continue end
-				local newNode = {
-					Obj = obj,
-					Parent = par,
-				}
-				nodes[obj] = newNode
-				par[#par+1] = newNode
+		local pending = {}
+		-- GetDescendants does not promise parents before children.
+		for i = 1,#insts do
+			local obj = insts[i]
+			if not nodes[obj] then
+				local node = {Obj = obj}
+				nodes[obj] = node
+				pending[#pending+1] = node
 			end
-		else
-			for i = 1,#insts do
-				local obj = insts[i]
-				local s,parObj = pcall(ffa,obj,"Instance")
-				local par = nodes[parObj]
-				if not par then continue end
-				local newNode = {
-					Obj = obj,
-					Parent = par,
-				}
-				nodes[obj] = newNode
-				par[#par+1] = newNode
+		end
+		for i = 1,#pending do
+			local node = pending[i]
+			local ok, parent = pcall(ffa, node.Obj)
+			local par = ok and nodes[parent]
+			if par and par ~= node then
+				node.Parent = par
+				par[#par+1] = node
+			else
+				nodes[node.Obj] = nil
 			end
+		end
+		if #nodes[game] == 0 then
+			warn("Dex++: Explorer found no top-level objects; descendants returned: " .. tostring(#insts))
 		end
 	end
 
