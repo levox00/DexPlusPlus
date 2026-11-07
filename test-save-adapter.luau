@@ -38,7 +38,7 @@ local warn = function() end
 				-- Some executors expose a different saveinstance signature and treat
 				-- the filename as a configuration table. Only retry this known mismatch.
 				local message = tostring(result)
-				if not (message:find("RepoURL", 1, true) and message:find("string", 1, true)) then
+				if not ((message:find("RepoURL", 1, true) and message:find("string", 1, true)) or (message:find("saveinstance.prepare", 1, true) and message:find("table expected, got string", 1, true) and message:find("#2", 1, true))) then
 					error(result, 0)
 				end
 				warn("Dex++: incompatible executor saveinstance signature; using USSI instead")
@@ -57,11 +57,15 @@ elseif scenario == "mismatch" or scenario == "missing" then
  assert(env.saveinstance("object2", "file2.rbxl", original) == "saved" and fetches == 1)
 elseif scenario == "native" then
  assert(success and result == "native" and calls == 0 and fetches == 0)
+elseif scenario == "other-argument" then
+ assert(not success and string.find(result, "#1", 1, true) and fetches == 0)
 else
  assert(not success and string.find(result, "disk failure", 1, true) and fetches == 0)
 end
 end
 test(function() error("attempt to index string with 'RepoURL'") end, "mismatch")
+test(function() error("invalid argument #2 to 'saveinstance.prepare' (table expected, got string)") end, "mismatch")
+test(function() error("invalid argument #1 to 'saveinstance.prepare' (table expected, got string)") end, "other-argument")
 test(nil, "missing")
 test(nil, "place")
 test(function(obj, file, options) assert(obj == "object" and file == "file.rbxl" and options.Decompile); return "native" end, "native")

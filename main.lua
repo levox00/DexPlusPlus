@@ -486,7 +486,7 @@ Main = (function()
 				-- Some executors expose a different saveinstance signature and treat
 				-- the filename as a configuration table. Only retry this known mismatch.
 				local message = tostring(result)
-				if not (message:find("RepoURL", 1, true) and message:find("string", 1, true)) then
+				if not ((message:find("RepoURL", 1, true) and message:find("string", 1, true)) or (message:find("saveinstance.prepare", 1, true) and message:find("table expected, got string", 1, true) and message:find("#2", 1, true))) then
 					error(result, 0)
 				end
 				warn("Dex++: incompatible executor saveinstance signature; using USSI instead")
